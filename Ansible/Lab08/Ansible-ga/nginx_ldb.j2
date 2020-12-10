@@ -1,0 +1,13 @@
+upstream backend {
+    {% for web in ldbwebservers %}
+    server {{ web }};
+    {% endfor %}
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://backend;
+    }
+}

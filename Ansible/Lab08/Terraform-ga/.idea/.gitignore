@@ -1,0 +1,8 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Datasource local storage ignored files
+/../../../../../../../../../../../../:\Users\grego\Downloads\MCT3-20-21\01_Netw-Scripting\02.Esli Heyvaert\2020-2021-network-scripting-all-labs-Esli-AernoudtGregoryMCT\NS - Copy\Lab08\Terraform\.idea/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/

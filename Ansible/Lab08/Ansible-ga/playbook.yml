@@ -1,0 +1,154 @@
+# ---
+# basis configuratie voor de Linux-servers
+# ---
+- name: configures the servers
+  hosts: linuxservers # groepering van alle linuxservers waarop we tasks/plays willen gaan uitvoeren.
+  become: true
+  become_method: sudo # sudo rechten gebruiken om onze tasks te kunnen uitvoeren.
+  tasks:
+    # ---
+    # DNS-server toevoegen
+    # ---
+    # de echo output toevoegen d.m.v. piping aan het resolver bestand zodat omzetting LAN-hostnamen naar IP's kan.
+    - name: add the DNS-server
+      shell: echo 'nameserver 192.168.40.1' | tee /etc/resolv.conf
+
+
+    # ---
+    # pakketten beheren
+    # ---
+    # ophalen van alle pakketten die reeds geinstalleerd zijn. Bij parameter manager geven we onze apt mee.
+    - name: gather the package facts
+      package_facts:
+        manager: apt
+
+    # update van alle apt pakketten
+    - name: apt update
+      apt:
+        update_cache: yes
+
+    # installeerd nginx webserver enkel op voorwaarde dat deze nog niet geinstalleerd is
+    - name: install webserver nginx
+      apt:
+        name: ['nginx']
+        state: latest
+      when: "'nginx' not in ansible_facts.packages"
+
+
+    # ---
+    # firewall rules instellen die verkeer toelaten of blokkeren met IPTABLES
+    # ---
+    # allow all RELATED(gerelateerde) and ESTABLISHED(reeds) connections in the INPUT chain of the filter table
+    - name: allow RELATED and ESTABLISHED
+      iptables:
+        chain: INPUT
+        ctstate: ESTABLISHED,RELATED
+        jump: ACCEPT
+
+    # allow HTTP connections in the INPUT chain of the filter table
+    - name: allow HTTP
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: "80"
+        ctstate: NEW
+        jump: ACCEPT
+
+    # allow SSH connections from subnet(source) in the INPUT chain of the filter table
+    - name: allow SSH
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: "22"
+        source: "192.168.50.0/24"
+        ctstate: NEW
+        jump: ACCEPT
+
+    # allow ICMP to INPUT chain in filter table
+    - name: allow ICMP
+      iptables:
+        chain: INPUT
+        protocol: icmp
+        jump: ACCEPT
+
+    # set policy of INPUT chain to DROP
+    - name: policy to DROP
+      iptables:
+        chain: INPUT
+        policy: DROP
+
+    # set policy of OUTPUT chain to ACCEPT
+    - name: policy to ACCEPT
+      iptables:
+        chain: OUTPUT
+        policy: ACCEPT
+
+
+# ---
+# webservers hun specifieke configuratie
+# ---
+- name: configuring the webservers
+  hosts: webservers # groepering van alle webservers waarop we tasks/plays willen gaan uitvoeren.
+  become: true
+  become_method: sudo # sudo rechten gebruiken om onze tasks te kunnen uitvoeren.
+  tasks:
+    # ---
+    # aanpassen van het HTML bestand
+    # ---
+    - name: edit default HTML file
+      shell: sed -i 's/Welcome to nginx!/Welcome {{ ansible_facts.nodename }}!/g' /var/www/html/index.nginx-debian.html
+    # sed is een stream editor om de zin te vervangen met de hostname van de node. flag /g (global replacement).
+
+# ---
+# loadbalancer de specifieke configuratie
+# ---
+- name: configuring the loadbalancer
+  hosts: loadbalancers # groepering van alle mogelijke loadbalancers waarop we tasks/plays willen gaan uitvoeren.
+  become: true
+  become_method: sudo # sudo rechten gebruiken om onze tasks te kunnen uitvoeren.
+  tasks:
+    # ---
+    # aanpassen van nginx configuratie
+    # ---
+    # kopieer het template bestand naar de juiste locatie.
+    - name: copy the nginx configuration file
+      template:
+        src: nginx_ldb.j2
+        dest: /etc/nginx/conf.d/nginx_ldb.conf
+        mode: 0777
+
+    # verwijder het default configuratie bestand van nginx
+    - name: remove the default nginx conf file
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    # nginx service restarten
+    - name: restart nginx
+      systemd:
+        state: restarted
+        name: nginx
+
+# ---
+# Windows-server de specifieke configuratie
+# ---
+- name: configuring the Windows-server
+  hosts: windowswebservers # groepering van alle mogelijke loadbalancers waarop we tasks/plays willen gaan uitvoeren.
+  tasks:
+    # --------------------
+    # IIS(Internet Information Services)
+    # --------------------
+    # IIS Windows webserver installeren
+    - name: ISS installation
+      win_feature:
+        name: web-server
+        include_management_tools: yes
+        include_sub_features: yes
+        state: present
+
+    # kopieer de index page van source(src:)naar de destination(dest)
+    - name: copy the index page
+      win_copy:
+        src: win.html
+        dest: C:\inetpub\wwwroot\index.html
+        force: yes
